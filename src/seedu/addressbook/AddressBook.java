@@ -14,14 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Scanner;
-import java.util.Set;
+import java.util.*;
 
 /*
  * NOTE : =============================================================
@@ -87,6 +80,7 @@ public class AddressBook {
     private static final String MESSAGE_ERROR_READING_FROM_FILE = "Unexpected error: unable to read from file: %1$s";
     private static final String MESSAGE_ERROR_WRITING_TO_FILE = "Unexpected error: unable to write to file: %1$s";
     private static final String MESSAGE_PERSONS_FOUND_OVERVIEW = "%1$d persons found!";
+    private static final String MESSAGE_SUGGESTIONS_FOUND_OVERVIEW = "0 persons found, %1$d suggestions above!";
     private static final String MESSAGE_STORAGE_FILE_CREATED = "Created new empty storage file: %1$s";
     private static final String MESSAGE_WELCOME = "Welcome to your Address Book!";
     private static final String MESSAGE_USING_DEFAULT_FILE = "Using default storage file : " + DEFAULT_STORAGE_FILEPATH;
@@ -445,6 +439,7 @@ public class AddressBook {
     /**
      * Finds and lists all persons in address book whose name contains any of the argument keywords.
      * Keyword matching is case sensitive.
+     * If no matching persons, returns a list of suggestions to users.
      *
      * @param commandArgs full command args string from the user
      * @return feedback display message for the operation result
@@ -452,8 +447,24 @@ public class AddressBook {
     private static String executeFindPersons(String commandArgs) {
         final Set<String> keywords = extractKeywordsFromFindPersonArgs(commandArgs);
         final ArrayList<String[]> personsFound = getPersonsWithNameContainingAnyKeyword(keywords);
+        String result;
+        if (!personsFound.isEmpty() && personsFound.get(0) == null) {
+            personsFound.remove(0);
+            result = getMessageForSuggestionsDisplayedSummary(personsFound);
+        } else {
+            result = getMessageForPersonsDisplayedSummary(personsFound);
+        }
         showToUser(personsFound);
-        return getMessageForPersonsDisplayedSummary(personsFound);
+        return result;
+    }
+
+    /**
+     * Constructs a feedback message to summarise an operation that displayed suggestions for find command.
+     * @param personsDisplayed used to generate summary
+     * @return summary message for persons suggested
+     */
+    private static String getMessageForSuggestionsDisplayedSummary(ArrayList<String[]> personsDisplayed) {
+        return String.format(MESSAGE_SUGGESTIONS_FOUND_OVERVIEW, personsDisplayed.size());
     }
 
     /**
@@ -484,13 +495,33 @@ public class AddressBook {
      */
     private static ArrayList<String[]> getPersonsWithNameContainingAnyKeyword(Collection<String> keywords) {
         final ArrayList<String[]> matchedPersons = new ArrayList<>();
+        if (keywords.contains("")) {
+            return matchedPersons;
+        }
+        final ArrayList<String[]> possiblePersons = new ArrayList<>();
+        ArrayList<String> listOfKeywords = new ArrayList<>(keywords);
         for (String[] person : getAllPersonsInAddressBook()) {
             final Set<String> wordsInName = new HashSet<>(splitByWhitespace(getNameFromPerson(person)));
             if (!Collections.disjoint(wordsInName, keywords)) {
                 matchedPersons.add(person);
             }
+            for (String current : wordsInName) {
+                for (String keyword : listOfKeywords) {
+                    if (current.contains(keyword)) {
+                        possiblePersons.add(person);
+                        break;
+                    }
+                }
+                if (possiblePersons.contains(person)) {
+                    break;
+                }
+            }
         }
-        return matchedPersons;
+        possiblePersons.add(0, null);
+        if (matchedPersons.size() != 0) {
+            return matchedPersons;
+        }
+        return possiblePersons;
     }
 
     /**
